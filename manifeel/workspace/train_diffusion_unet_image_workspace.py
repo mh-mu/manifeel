@@ -156,7 +156,12 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
         # training loop
         log_path = os.path.join(self.output_dir, 'logs.json.txt')
         with JsonLogger(log_path) as json_logger:
-            for local_epoch_idx in range(cfg.training.num_epochs):
+            # `num_epochs` is an absolute horizon, not a count of further epochs: on
+            # resume `self.epoch` is restored but the LR scheduler is not (it is rebuilt
+            # every launch from num_epochs with last_epoch=global_step-1), so counting
+            # from zero here would push the cosine schedule past 1.0 and ramp the LR
+            # back up instead of continuing its decay.
+            for local_epoch_idx in range(max(0, cfg.training.num_epochs - self.epoch)):
                 step_log = dict()
                 # ========= train for this epoch ==========
                 if cfg.training.freeze_encoder:
@@ -331,8 +336,11 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
             self._saving_thread.start()
         else:
             torch.save(payload, path.open('wb'), pickle_module=dill)
-        # Retain only the last three epochs
-        _prune_checkpoints(path.parent)
+        # Retain only the last `checkpoint.keep_last` epochs. Read defensively: a
+        # checkpoint saved before this key existed carries a cfg without it, and that
+        # cfg is what resume_training loads back.
+        keep_last = OmegaConf.select(self.cfg, 'checkpoint.keep_last', default=3)
+        _prune_checkpoints(path.parent, keep=int(keep_last or 3))
         return str(path.absolute())
     
     def resume_training(self, cfg):
@@ -393,8 +401,8 @@ class TrainDiffusionUnetImageWorkspace(BaseWorkspace):
                     return file
         return None
 
-def _prune_checkpoints(checkpoint_dir):
-    """Keep only the last three epoch checkpoints in the folder."""
+def _prune_checkpoints(checkpoint_dir, keep=3):
+    """Keep only the last `keep` epoch checkpoints in the folder."""
     checkpoint_files = list(checkpoint_dir.glob('*.ckpt'))
     # Extract epoch numbers from filenames using regex
     epoch_files = []
@@ -406,11 +414,11 @@ def _prune_checkpoints(checkpoint_dir):
             epoch_files.append((epoch, file))
     # Sort files by epoch number
     epoch_files.sort(key=lambda x: x[0], reverse=True)
-    # Remove files beyond the latest three epochs
-    if len(epoch_files) > 3:
-        print(f"Keeping checkpoints: {[f[0] for f in epoch_files[:3]]}")
-        print(f"Removing checkpoints: {[f[0] for f in epoch_files[3:]]}")
-        for _, file in epoch_files[3:]:
+    # Remove files beyond the latest `keep` epochs
+    if len(epoch_files) > keep:
+        print(f"Keeping checkpoints: {[f[0] for f in epoch_files[:keep]]}")
+        print(f"Removing checkpoints: {[f[0] for f in epoch_files[keep:]]}")
+        for _, file in epoch_files[keep:]:
             try:
                 file.unlink()
                 print(f"Deleted: {file}")

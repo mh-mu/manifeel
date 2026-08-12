@@ -133,6 +133,8 @@ logging:
   group: null
 
 checkpoint:
+  # how many latest_epoch*.ckpt files to retain; older ones are deleted on every save
+  keep_last: 3
   topk:
     monitor_key: train_loss
     mode: min

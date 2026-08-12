@@ -12,6 +12,7 @@ from diffusion_policy.common.pytorch_util import dict_apply
 from diffusion_policy.env_runner.base_image_runner import BaseImageRunner
 import cv2
 import hydra
+import os
 from omegaconf import OmegaConf
 import wandb
 import numpy as np
@@ -42,6 +43,21 @@ class ManifeelRunner(BaseImageRunner):
         # path relative to Gym's Hydra search path (cfg dir)
         isaacgym_cfg = hydra.compose(config_name=isaacgym_cfg_name)
         isaacgym_cfg['shape_meta'] = OmegaConf.create(shape_meta)
+
+        # Select the GPU here rather than with CUDA_VISIBLE_DEVICES: isaacgym enumerates
+        # its graphics device independently of the CUDA remap, so CVD=1 leaves
+        # graphics_device_id pointing at physical GPU 0 while the sim runs on GPU 1, and
+        # the first camera tensor dies with `cudaImportExternalMemory ... error 999`
+        # followed by a segfault.
+        gpu = os.environ.get('MANIFEEL_GPU')
+        if gpu is not None and gpu != '':
+            isaacgym_cfg.sim_device = f'cuda:{gpu}'
+            isaacgym_cfg.rl_device = f'cuda:{gpu}'
+            isaacgym_cfg.graphics_device_id = int(gpu)
+            # isaacgymenvs never calls set_device, so torch's current device would stay
+            # cuda:0 while gymtorch wraps buffers allocated on this one — PhysX then dies
+            # with `illegal memory access` / CUDA error 700 as the sim starts.
+            torch.cuda.set_device(int(gpu))
 
         if n_test is not None:
             # override number of evaluated environments

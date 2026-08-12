@@ -1,9 +1,10 @@
 """
 Usage:
 python eval.py \
---checkpoint /scratch/gilbreth/luu15/Projects/manifeel/data/outputs/vision_sPiHezy_90/42/checkpoints/latest_epoch224.ckpt \
--o /scratch/gilbreth/luu15/Projects/manifeel/data/outputs/vision_sPiHezy_90/42/eval_output \
--d cuda:0
+--checkpoint data/outputs/vision_pih_50/44/checkpoints/latest_epoch200.ckpt \
+-o data/outputs/vision_pih_50/44/eval_epoch200 \
+-d cuda:0 \
+-x task.env_runner.test_start_seed=200000
 """
 
 import isaacgym
@@ -22,28 +23,40 @@ import numpy as np
 import dill
 import wandb
 import json
+from omegaconf import OmegaConf
 from diffusion_policy.workspace.base_workspace import BaseWorkspace
+
+# the checkpoint's cfg may still carry unresolved ${eval:'...'} interpolations
+OmegaConf.register_new_resolver("eval", eval, replace=True)
 
 @click.command()
 @click.option('-c', '--checkpoint', required=True)
 @click.option('-o', '--output_dir', required=True)
-@click.option('-n', '--cfg_name', required=True)
+@click.option('-n', '--cfg_name', default=None,
+              help='Unused; kept for backwards compatibility. The config comes from the checkpoint.')
 @click.option('-d', '--device', default='cuda:0')
-def main(checkpoint, output_dir, cfg_name, device):
-    if os.path.exists(output_dir):
+@click.option('-x', '--override', multiple=True,
+              help='dotlist override applied to the checkpoint cfg, e.g. task.env_runner.test_start_seed=200000')
+@click.option('--yes', is_flag=True, help='Overwrite an existing output dir without prompting.')
+def main(checkpoint, output_dir, cfg_name, device, override, yes):
+    if os.path.exists(output_dir) and not yes:
         click.confirm(f"Output path {output_dir} already exists! Overwrite?", abort=True)
     pathlib.Path(output_dir).mkdir(parents=True, exist_ok=True)
-    
-    # Initialize Hydra
-    hydra.initialize(config_path=str(pathlib.Path(__file__).parent.joinpath(
-        './manifeel','config')), version_base=None)
-    # Load configuration
-    # TO-DO: allows passing argument for config_name
-    cfg = hydra.compose(config_name=str(cfg_name))
+
+    # ManifeelRunner.__init__ composes the isaacgym config itself, so a GlobalHydra
+    # instance has to be live even though the workspace cfg comes from the checkpoint.
+    # initialize_config_dir, not initialize: the latter rejects an absolute path.
+    hydra.initialize_config_dir(config_dir=str(pathlib.Path(__file__).parent.joinpath(
+        'manifeel', 'config').resolve()), version_base=None)
 
     # load checkpoint
     payload = torch.load(open(checkpoint, 'rb'), pickle_module=dill)
-    # cfg = payload['cfg']
+    # Take the training cfg rather than recomposing it: this is what guarantees the
+    # policy shape_meta and the eval env match the run that produced the weights.
+    cfg = payload['cfg']
+    if override:
+        cfg = OmegaConf.merge(cfg, OmegaConf.from_dotlist(list(override)))
+    print(OmegaConf.to_yaml(cfg.task.env_runner))
     cls = hydra.utils.get_class(cfg._target_)
     workspace = cls(cfg, output_dir=output_dir)
     workspace: BaseWorkspace
