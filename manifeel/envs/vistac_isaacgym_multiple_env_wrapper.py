@@ -69,8 +69,11 @@ class MultipleIsaacEnvWrapper():
                                 'tactile_depth_right', \
                                 ]
         self.vision_obs_keys = [key for key in rgb_keys if key not in tactile_rgb_obs_keys]
-        # add side view for better visualization
-        if 'client' not in self.vision_obs_keys:
+        # add side view for better visualization, but only if the task declares
+        # that camera -- TacSLTaskInsertion does not, and asking render() for a
+        # view the sim never created raises KeyError
+        sim_cameras = [camera['name'] for camera in self.cfg.task.env.get('camera_configs', [])]
+        if 'client' in sim_cameras and 'client' not in self.vision_obs_keys:
             self.vision_obs_keys.append('client')
         # if 'wrist' not in self.vision_obs_keys:
         #     self.vision_obs_keys.append('wrist')
@@ -164,10 +167,20 @@ class MultipleIsaacEnvWrapper():
             raise RuntimeError('Must run reset or step before render.')
         img_list = []
 
-        # If 'client' is available, compute the target size (height, width)
-        target_shape = None
+        # Low-res tactile views are tiled beside the camera views, so they are
+        # resized onto a shared canvas: the spectator view when the task has one,
+        # otherwise the first regular camera view (all tiles must share height,
+        # since they are concatenated along the width axis below).
+        low_res_views = ['tactile_force_field_left', 'tactile_force_field_right',
+                         'left_tactile_camera_taxim', 'right_tactile_camera_taxim']
         if 'client' in self.vision_obs_keys:
-            target_shape = self.render_cache['client'].shape[2:4]  # (H, W)
+            reference_view = 'client'
+        else:
+            reference_view = next((key for key in self.vision_obs_keys
+                                   if key not in low_res_views), None)
+        target_shape = None
+        if reference_view is not None:
+            target_shape = self.render_cache[reference_view].shape[2:4]  # (H, W)
 
         for obs_view in self.vision_obs_keys:
             imgs = self.render_cache[obs_view]  # (num_envs, 3, H, W)
