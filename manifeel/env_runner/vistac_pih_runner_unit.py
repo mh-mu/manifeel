@@ -198,6 +198,12 @@ class ManifeelRunner(BaseImageRunner):
 
         # log aggregate metrics
         for prefix, value in max_rewards.items():
+            # per-env 0/1 outcomes, so an eval can say WHICH envs solved the task --
+            # needed to pick a representative rollout video, and to put an interval on
+            # the mean. Only the mean is a wandb metric; keep the vector out of the
+            # training log dict.
+            if os.environ.get('MANIFEEL_LOG_PER_ENV'):
+                log_data[prefix+'scores'] = [float(v) for v in value]
             name = prefix+'mean_score'
             value = np.mean(value)
             log_data[name] = value

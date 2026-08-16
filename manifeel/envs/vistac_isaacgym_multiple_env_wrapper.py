@@ -81,6 +81,16 @@ class MultipleIsaacEnvWrapper():
         if not self.vision_obs_keys:
             self.vision_obs_keys = ['front', 'side']
 
+        # Which views get tiled into the rollout video. Defaults to the policy's own
+        # cameras; MANIFEEL_RENDER_VIEWS (comma-separated) overrides it for
+        # visualization only -- the observations the policy actually receives come from
+        # shape_meta via _apply_obs_by_keys and are untouched by this.
+        render_views = os.environ.get('MANIFEEL_RENDER_VIEWS')
+        if render_views:
+            self.render_view_keys = [v.strip() for v in render_views.split(',') if v.strip()]
+        else:
+            self.render_view_keys = list(self.vision_obs_keys)
+
     @property
     def observation_space(self):
         obs_space = self.envs.observation_space
@@ -173,16 +183,20 @@ class MultipleIsaacEnvWrapper():
         # since they are concatenated along the width axis below).
         low_res_views = ['tactile_force_field_left', 'tactile_force_field_right',
                          'left_tactile_camera_taxim', 'right_tactile_camera_taxim']
-        if 'client' in self.vision_obs_keys:
+        missing = [k for k in self.render_view_keys if k not in self.render_cache]
+        if missing:
+            raise KeyError(f'render views {missing} are not produced by this task; '
+                           f'available: {sorted(self.render_cache.keys())}')
+        if 'client' in self.render_view_keys:
             reference_view = 'client'
         else:
-            reference_view = next((key for key in self.vision_obs_keys
+            reference_view = next((key for key in self.render_view_keys
                                    if key not in low_res_views), None)
         target_shape = None
         if reference_view is not None:
             target_shape = self.render_cache[reference_view].shape[2:4]  # (H, W)
 
-        for obs_view in self.vision_obs_keys:
+        for obs_view in self.render_view_keys:
             imgs = self.render_cache[obs_view]  # (num_envs, 3, H, W)
             # print(f"✅rendering view: {obs_view}, imgs shape: {imgs.shape}")
             
