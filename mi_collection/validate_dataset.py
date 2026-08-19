@@ -73,10 +73,13 @@ def validate(path: str, expect_episodes: int | None = None) -> List[str]:
     check(info.get("control_dt") is not None, "sidecar has no control_dt")
     pairs = info.get("contact_pairs") or {}
     check(bool(pairs), "sidecar has no contact_pairs map")
+    # A subset, not equality: a task need not produce every pair type, and the
+    # hand-env channels are deliberately dropped from the peg-insertion datasets
+    # (no robot body reaches the socket). The analyzer skips an absent group.
     check(
-        set(pairs.values()) == set(CONTACT_LABELS),
-        f"sidecar contact_pairs labels {sorted(set(pairs.values()))} != "
-        f"{sorted(CONTACT_LABELS)}",
+        set(pairs.values()) <= set(CONTACT_LABELS),
+        f"sidecar contact_pairs has unknown labels "
+        f"{sorted(set(pairs.values()) - set(CONTACT_LABELS))}",
     )
     for name in pairs:
         check(name in buffer.keys(), f"sidecar names {name}, which is not a channel")
