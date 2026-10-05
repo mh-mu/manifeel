@@ -66,6 +66,8 @@ class TaskSpec(ABC):
 
     #: Short identifier, recorded in the sidecar and selected by ``--task-spec``.
     name: str = "base"
+    #: The sidecar's ``env`` field, which the fbsource readers report as the source env.
+    env_name: str = "manifeel_tacsl"
 
     @abstractmethod
     def contact_pairs(self, include_optional: bool = True) -> List[ContactPairSpec]:

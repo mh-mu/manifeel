@@ -36,6 +36,7 @@ class PegInsertionSpec(TaskSpec):
     """Contact pairs, success and world state for the peg-in-hole task."""
 
     name: str = "peg_insertion"
+    env_name: str = "manifeel_tacsl_insertion"
 
     def contact_pairs(self, include_optional: bool = True) -> List[ContactPairSpec]:
         pairs = [
@@ -108,14 +109,3 @@ class PegInsertionSpec(TaskSpec):
                 "--camera-downsample-only until ManiFeel encoders exist."
             ),
         }
-
-
-#: ``--task-spec`` name -> constructor.  An explicit mapping, not a decorator
-#: registry, so importing this module has no side effects.
-TASK_SPECS: Dict[str, type] = {PegInsertionSpec.name: PegInsertionSpec}
-
-
-def get_task_spec(name: str) -> TaskSpec:
-    if name not in TASK_SPECS:
-        raise KeyError(f"Unknown --task-spec {name!r}; have {sorted(TASK_SPECS)}.")
-    return TASK_SPECS[name]()

@@ -38,7 +38,7 @@ from diffusion_policy.common.replay_buffer import ReplayBuffer  # noqa: E402
 from diffusion_policy.workspace.base_workspace import BaseWorkspace  # noqa: E402
 
 from mi_collection.collector import CollectOptions, MICollector  # noqa: E402
-from mi_collection.task_specs.peg_insertion import get_task_spec  # noqa: E402
+from mi_collection.task_specs import get_task_spec  # noqa: E402
 
 OmegaConf.register_new_resolver("eval", eval, replace=True)
 
@@ -71,6 +71,7 @@ def main():
     parser.add_argument("--num-envs", type=int, default=4)
     parser.add_argument("--max-steps", type=int, default=200)
     parser.add_argument("--tail", type=int, default=20)
+    parser.add_argument("--task-spec", default="peg_insertion")
     args = parser.parse_args()
 
     hydra.initialize_config_dir(
@@ -89,7 +90,7 @@ def main():
     policy.to(torch.device(args.device))
     policy.eval()
 
-    spec = get_task_spec("peg_insertion")
+    spec = get_task_spec(args.task_spec)
     options = CollectOptions(
         out_dir=work,
         num_episodes=args.num_envs,

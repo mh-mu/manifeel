@@ -39,7 +39,7 @@ from mi_collection import pilot_report, writer as writer_mod  # noqa: E402
 from mi_collection.collector import CollectOptions, MICollector  # noqa: E402
 from mi_collection.contact import CONTACT_STATE_DIM  # noqa: E402
 from mi_collection.recording_wrapper import DEFAULT_OBS_CHANNELS  # noqa: E402
-from mi_collection.task_specs.peg_insertion import get_task_spec  # noqa: E402
+from mi_collection.task_specs import get_task_spec  # noqa: E402
 
 # the checkpoint's cfg may still carry unresolved ${eval:'...'} interpolations
 OmegaConf.register_new_resolver("eval", eval, replace=True)
@@ -75,7 +75,8 @@ _PILOT_HORIZONS = (100, 150, 200, 250, 300, 400, 500)
 @click.option(
     "--include-plug-table/--no-include-plug-table",
     default=True,
-    help="Record the optional plug<->table object-env pair.",
+    help="Record the task spec's optional contact pairs (peg insertion: "
+    "plug<->table; object search: hand<->box and item<->table).",
 )
 @click.option(
     "--pilot",
@@ -263,7 +264,7 @@ def _sidecar(
         "contact_state_dim": CONTACT_STATE_DIM,
         "contact_state_layout": ["in_contact", "force_world_x", "force_world_y",
                                  "force_world_z"],
-        "env": "manifeel_tacsl_insertion",
+        "env": task_spec.env_name,
         "task_name": str(cfg.task.name),
         "task_spec": task_spec.name,
         "checkpoint": os.path.abspath(checkpoint),
