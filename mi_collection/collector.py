@@ -167,6 +167,10 @@ class MICollector:
         options = self.options
         os.makedirs(os.path.join(options.out_dir, "shards"), exist_ok=True)
         params = options.shard_params()
+        # Only when the spec has any, so peg-insertion shard params are unchanged.
+        spec_params = self.task_spec.collection_params()
+        if spec_params:
+            params["task_spec"] = spec_params
         shard_paths: List[str] = []
         batch_reports: List[Dict[str, object]] = []
 
@@ -203,6 +207,9 @@ class MICollector:
             max_steps=options.max_steps,
             tail_steps=options.success_tail_steps,
             on_complete=lambda _i, episode, meta: shard.add(episode, meta),
+            annotate=lambda episode: self.task_spec.annotate_episode(
+                episode, self.control_dt
+            ),
         )
         self.recorder.sink = accumulator.push
 

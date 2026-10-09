@@ -112,6 +112,7 @@ class InnerStepRecorder(gym.Wrapper):
             task.rew_buf.detach().to("cpu").numpy().astype(np.float32).reshape(-1, 1)
         )
         row["success"] = self.task_spec.success(task).reshape(-1, 1).astype(np.uint8)
+        row.update(self.task_spec.extra_step_channels(task))
 
         if self.sink is not None:
             self.sink(self.step_index, row)

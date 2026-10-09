@@ -93,6 +93,29 @@ class TaskSpec(ABC):
     def analyzer_recommendations(self) -> Dict[str, object]:
         """Channel roles the fbsource analyzers should be pointed at."""
 
+    # -- optional hooks; the defaults record nothing extra -------------------
+    def success_rule(self) -> Dict[str, object]:
+        """What :meth:`success` tests, with its thresholds, for the sidecar."""
+        return {}
+
+    def extra_step_channels(self, task: object) -> Dict[str, np.ndarray]:
+        """Extra per-step ``(num_envs, D)`` channels, read after the action."""
+        return {}
+
+    def annotate_episode(
+        self, episode: Dict[str, np.ndarray], control_dt: float
+    ) -> Dict[str, np.ndarray]:
+        """Extra ``(T, D)`` channels computed from one finished episode."""
+        return {}
+
+    def finalize_store(self, path: str) -> Dict[str, object]:
+        """Post-process the consolidated store; returns sidecar additions."""
+        return {}
+
+    def collection_params(self) -> Dict[str, object]:
+        """Spec settings a resumable shard must match (empty: nothing to match)."""
+        return {}
+
     def resolve_bodies(self, task: object, names: Sequence[str]) -> List[int]:
         """Rigid-body indices for ``names``, failing loudly on an unknown name.
 

@@ -139,6 +139,7 @@ def main(
     merged = writer_mod.consolidate(
         result["shard_paths"], out, overwrite=overwrite, limit=num_episodes
     )
+    finalized = task_spec.finalize_store(out)
     stats = pilot_report.contact_stats(out)
     info = _sidecar(
         checkpoint=checkpoint,
@@ -153,6 +154,10 @@ def main(
         elapsed=time.time() - started,
         contact_stats=stats,
     )
+    info.update(finalized)
+    rule = task_spec.success_rule()
+    if rule:
+        info["success_rule"] = rule
     path = writer_mod.write_sidecar(out, info)
     print(f"\nWrote {merged['num_episodes']} episodes, {merged['num_steps']} steps")
     print(f"  success={merged['num_success']}  sidecar={path}")

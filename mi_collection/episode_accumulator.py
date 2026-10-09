@@ -93,8 +93,13 @@ class BatchAccumulator:
         max_steps: int,
         tail_steps: int,
         on_complete: Callable[[int, Dict[str, np.ndarray], Dict[str, int]], None],
+        annotate: Optional[
+            Callable[[Dict[str, np.ndarray]], Dict[str, np.ndarray]]
+        ] = None,
     ) -> None:
         self.num_envs = int(num_envs)
+        #: Adds whole-episode channels (e.g. motion-primitive labels) at flush.
+        self.annotate = annotate
         self.max_steps = int(max_steps)
         self.tail_steps = int(tail_steps)
         self.on_complete = on_complete
@@ -141,6 +146,8 @@ class BatchAccumulator:
             "length": accumulator.length,
         }
         episode = accumulator.stack()
+        if self.annotate is not None:
+            episode.update(self.annotate(episode))
         accumulator.rows = []
         self.completed += 1
         self.on_complete(accumulator.env_index, episode, meta)

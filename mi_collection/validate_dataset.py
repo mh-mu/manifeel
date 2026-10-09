@@ -96,6 +96,20 @@ def validate(path: str, expect_episodes: int | None = None) -> List[str]:
             f"{name} column 0 is not binary",
         )
 
+    if "motion_primitive" in buffer.keys():
+        vocabulary = (info.get("motion_primitives") or {}).get("vocabulary") or []
+        check(bool(vocabulary), "motion_primitive present but sidecar has no vocabulary")
+        codes = np.asarray(buffer["motion_primitive"][:])
+        check(
+            int(codes.max(initial=0)) < len(vocabulary),
+            f"motion_primitive has codes >= the {len(vocabulary)}-entry vocabulary",
+        )
+        phases = np.asarray(buffer["primitive_phase"][:])
+        check(
+            bool(np.all((phases >= 0.0) & (phases <= 1.0))),
+            "primitive_phase is outside [0, 1]",
+        )
+
     success = np.asarray(buffer.meta["episode_success"][:], dtype=np.int64)
     first = np.asarray(buffer.meta["first_success_step"][:], dtype=np.int64)
     max_steps = int(info.get("max_steps", lengths.max()))

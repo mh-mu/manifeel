@@ -29,6 +29,9 @@ class FakeSpec:
     def state_full(self, task):
         return np.full((task.num_envs, 6), float(task.step_count), dtype=np.float32)
 
+    def extra_step_channels(self, task):
+        return {}
+
 
 class FakeTask:
     def __init__(self, num_envs, num_bodies=4):

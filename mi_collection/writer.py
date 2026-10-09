@@ -200,8 +200,10 @@ def channel_roles(channels: Sequence[str]) -> Dict[str, str]:
             roles[name] = "action"
         elif name == "timestamp":
             roles[name] = "time"
-        elif name == "success":
+        elif name in ("success", "success_upstream"):
             roles[name] = "outcome"
+        elif name in ("motion_primitive", "primitive_phase"):
+            roles[name] = "annotation"
         elif name.startswith("contact"):
             roles[name] = "contact"
         elif name.startswith("reward"):

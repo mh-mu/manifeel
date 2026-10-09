@@ -100,5 +100,78 @@ class ObjectSearchSpecTest(unittest.TestCase):
         self.assertEqual(sum(widths), 23)
 
 
+class StrictSuccessTask(FakeObjectSearchTask):
+    """Two envs, both inside the upstream band; geometry and contacts set per test."""
+
+    def __init__(self):
+        super().__init__(num_envs=2)
+        self.socket_pos = torch.zeros(2, 3)
+        self.plug_pos = torch.tensor([[0.0, 0.0, 0.10], [0.0, 0.0, 0.10]])
+        upright = [0.0, 0.0, 0.0, 1.0]
+        self.socket_quat = torch.tensor([upright, upright])
+        self.plug_quat = torch.tensor([upright, upright])
+        self.band = torch.tensor([True, True])
+        # Both hand groups on the item (body 1) in both envs.
+        self.contact_force_pairwise = antisymmetric(
+            2,
+            10,
+            [(e, hand, 1, [1.0, 0.0, 0.0]) for e in (0, 1) for hand in (6, 8)],
+        )
+
+    def _check_success(self):
+        return self.band
+
+
+class StrictSuccessTest(unittest.TestCase):
+    def test_held_lifted_upright_in_band_succeeds(self):
+        np.testing.assert_array_equal(
+            ObjectSearchSpec().success(StrictSuccessTask()), [1, 1]
+        )
+
+    def test_one_finger_is_not_a_grasp(self):
+        task = StrictSuccessTask()
+        task.contact_force_pairwise = antisymmetric(
+            2, 10, [(0, 6, 1, [1.0, 0.0, 0.0]), (1, 6, 1, [1.0, 0.0, 0.0]),
+                    (1, 9, 1, [0.0, 1.0, 0.0])]
+        )
+        # env 0: left only; env 1: left link + right gel.
+        np.testing.assert_array_equal(ObjectSearchSpec().success(task), [0, 1])
+
+    def test_tipped_item_fails(self):
+        task = StrictSuccessTask()
+        s = float(np.sin(np.deg2rad(45) / 2))
+        c = float(np.cos(np.deg2rad(45) / 2))
+        task.plug_quat = torch.tensor([[s, 0.0, 0.0, c], [0.0, 0.0, s, c]])
+        # env 0 tilts 45 deg about x; env 1 only yaws, which is still upright.
+        np.testing.assert_array_equal(ObjectSearchSpec().success(task), [0, 1])
+
+    def test_item_not_lifted_fails(self):
+        task = StrictSuccessTask()
+        task.plug_pos = torch.tensor([[0.0, 0.0, 0.03], [0.0, 0.0, 0.06]])
+        np.testing.assert_array_equal(ObjectSearchSpec().success(task), [0, 1])
+
+    def test_out_of_band_fails_and_upstream_is_recorded(self):
+        task = StrictSuccessTask()
+        task.band = torch.tensor([False, True])
+        spec = ObjectSearchSpec()
+        np.testing.assert_array_equal(spec.success(task), [0, 1])
+        extra = spec.extra_step_channels(task)
+        np.testing.assert_array_equal(extra["success_upstream"], [[0], [1]])
+        self.assertEqual(extra["success_upstream"].dtype, np.uint8)
+
+    def test_non_strict_is_upstream(self):
+        task = StrictSuccessTask()
+        task.contact_force_pairwise = torch.zeros(2, 10, 10, 3)
+        spec = ObjectSearchSpec(strict_success=False)
+        np.testing.assert_array_equal(spec.success(task), [1, 1])
+        self.assertIn("upstream", spec.success_rule()["predicate"])
+
+    def test_collection_params_carry_the_rule_and_primitive_version(self):
+        params = ObjectSearchSpec().collection_params()
+        self.assertEqual(params["success_rule"]["min_lift_m"], 0.05)
+        self.assertIn("version", params["motion_primitives"])
+        self.assertEqual(PegInsertionSpec().collection_params(), {})
+
+
 if __name__ == "__main__":
     unittest.main()
