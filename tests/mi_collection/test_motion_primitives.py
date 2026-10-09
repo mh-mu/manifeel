@@ -82,6 +82,23 @@ class LabelTest(unittest.TestCase):
         labels, _ = mp.label_episode(episode, DT)
         self.assertEqual(names(labels)[-1], "failed_lift")
 
+    def test_empty_closed_hand_above_the_box_is_a_failed_lift(self):
+        # Close on nothing in the box, rise 0.2 m, then wait up there.
+        episode = scripted_episode(
+            NOMINAL[:2]
+            + [(8, 0.0, 0.0, CLOSED, False, False), (10, 0.02, 0.0, CLOSED, False, False)]
+            + [(10, 0.0, 0.0, CLOSED, False, False)]
+        )
+        labels, _ = mp.label_episode(episode, DT)
+        self.assertEqual(names(labels)[-2:], ["close", "failed_lift"])
+
+    def test_open_idle_hand_above_the_box_hovers(self):
+        episode = scripted_episode(
+            [(6, 0.0, 0.0, OPEN, False, False)] + NOMINAL[:2]
+        )
+        labels, _ = mp.label_episode(episode, DT)
+        self.assertEqual(names(labels), ["hover", "descend", "search"])
+
     def test_regrasp_releases_then_closes_again(self):
         episode = scripted_episode(
             NOMINAL[:4]

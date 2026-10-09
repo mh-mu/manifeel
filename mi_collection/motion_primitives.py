@@ -42,15 +42,15 @@ PRIMITIVES: Tuple[str, ...] = (
     "descend",  # gripper open, moving down, touching nothing
     "search",  # gripper open, low in the box, touching nothing
     "probe",  # gripper open, a finger touching the item or a box wall
-    "close",  # gripper closing or commanded closed, not lifting
+    "close",  # gripper closing, or commanded closed in the box / on the item
     "lift",  # commanded closed, item held by both fingers, lifted and rising
     "hold",  # commanded closed, item held and lifted, not rising
-    "failed_lift",  # commanded closed, hand rising, item not held
+    "failed_lift",  # commanded closed, item not held, hand rising or above the rim
     "release",  # gripper opening
-    "other",  # none of the above (e.g. open, still, above the box)
+    "hover",  # gripper open, above the rim, not descending, touching nothing
 )
 CODES: Dict[str, int] = {name: i for i, name in enumerate(PRIMITIVES)}
-VERSION: int = 1
+VERSION: int = 2
 
 #: ``state_full`` columns (object-search layout, see ``ObjectSearchSpec``).
 _EE_Z, _ITEM_Z, _BOX_Z = 2, 9, 16
@@ -66,8 +66,9 @@ class PrimitiveParams:
     #: The policies also narrow the gripper part-way (0.030-0.035) and reopen;
     #: ``width_rate`` catches those as close / release.
     close_command: float = 0.030
-    #: EE height above the box origin below which the hand is searching (starts at
-    #: 0.074, works at 0.007-0.02 on the vistac smoke rollouts).
+    #: EE height above the box origin below which the hand is in the box (starts at
+    #: 0.074, searches at 0.007-0.04 in the pilot; vistac hovers at 0.05-0.08 when
+    #: it stalls late in a failed episode).
     rim_height: float = 0.05
     #: Item centre height above the box origin when it rests upright.
     item_rest_height: float = 0.0048
@@ -130,14 +131,19 @@ def raw_labels(
         touching |= _in_contact(channels, name, n)
     lifted = item_h >= params.lifted
 
-    labels = np.full(n, CODES["other"], dtype=np.uint8)
+    in_box = ee_h <= params.rim_height
+    closing = v_width < -params.width_rate
+    labels = np.full(n, CODES["hover"], dtype=np.uint8)
     # Lowest priority first: every later assignment wins where it applies.
-    labels[ee_h <= params.rim_height] = CODES["search"]
+    labels[in_box] = CODES["search"]
     labels[~touching & (vz_ee < -params.vz_moving)] = CODES["descend"]
     labels[touching] = CODES["probe"]
     labels[v_width > params.width_rate] = CODES["release"]
-    labels[closed | (v_width < -params.width_rate)] = CODES["close"]
-    labels[closed & ~held & (vz_ee > params.vz_moving)] = CODES["failed_lift"]
+    labels[closing | (closed & (in_box | touching))] = CODES["close"]
+    # The vision / tacff policies often close on nothing and carry the empty
+    # gripper far above the box (pilot: 0.2-0.7 m): that is the failed lift too.
+    empty_up = (vz_ee > params.vz_moving) | ~in_box
+    labels[closed & ~held & empty_up] = CODES["failed_lift"]
     labels[closed & held & lifted] = CODES["hold"]
     labels[closed & held & lifted & (vz_item > params.vz_moving)] = CODES["lift"]
     return labels
